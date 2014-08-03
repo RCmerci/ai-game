@@ -5,7 +5,7 @@
                  hp=100,
                  mp=100,
                  damage=10,
-                 direction=right,
+                 direction="right",
                  alive=true}).
 
 %% 下面这些暂时没用---------------------------------------
@@ -21,3 +21,5 @@
 -define(RD_PERSON, person).
 -define(ETS_TABLE_NAME, person_info).
 -define(ETS_KEY_POS, name).
+-define(MAX_X, 20).
+-define(MAX_Y, 20).

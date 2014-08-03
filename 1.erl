@@ -1,30 +1,20 @@
 -module('1').
 -export([init/0]).
 -export([get_connect/3, start/0, loop_for_every_one/1]).
-%%先把record写在这里，以后移到一个单独的hrl文件
--record(person, {name,
-                 x,
-                 y,
-                 hp=100,
-                 mp=100,
-                 damage=10,
-                 direction=right,
-                 alive=true}).
-%% gsc:gamer sent content,也就是玩家发送的内容的一个record
--record(gsc, {content_type, content}).
-%% get_info:请求person信息的record
--record(get_info, {content=[]}).
-%% set：玩家操作person
--record(set, {name, direction, attack}).
+-include("records_and_config.hrl").
+-define(TEST, true).
+-import(utils, [util_get_info/0,
+                get_X_Y_in_control/4,
+                get_X_Y_in_control/6]).
 %%初始化
 init()->
     %%ets table放在这里是否不好。（打算一个用户一个进程，但是ets表不能放在
     %%各自的进程里，要放在总的一个进程里，放在各自进程的话，如果只放各自的
-    %%person 会不好弄，都放的话要复制几个相同的）
-    ets:new(person_info, [named_table, public, {keypos, #person.name}]),
+    %%?RD_PERSON 会不好弄，都放的话要复制几个相同的）
+    ets:new(?ETS_TABLE_NAME, [named_table, public, {keypos, #?RD_PERSON.?ETS_KEY_POS}]),
     %%这里以后要定义一些宏，不要硬编码
-    ets:insert(tab, #person{name=man_1, x=0, y=0, hp=100, mp=100, damage=10, direction=right}),
-    ets:insert(tab, #person{name=man_2, x=20, y=20, hp=100, mp=100, damage=10, direction=left}),
+    ets:insert(?ETS_TABLE_NAME, #?RD_PERSON{name="man_1", x=0, y=0, hp=100, mp=100, damage=10, direction="right"}),
+    ets:insert(?ETS_TABLE_NAME, #?RD_PERSON{name="man_2", x=20, y=20, hp=100, mp=100, damage=10, direction="left"}),
 
     start().
 
@@ -72,8 +62,8 @@ loop_for_get_info(Socket) ->
 sub_loop_for_get_info([], All) ->
     sub_loop_for_get_info(All, All);
 sub_loop_for_get_info([Socket|Rest], All) ->
-    %% 0.2秒等待
-    case gen_tcp:recv(Socket, 0, 200) of
+    %% 0.1秒等待
+    case gen_tcp:recv(Socket, 0, 100) of
         {ok, Content} ->
             handle_get(Socket, Content),
             sub_loop_for_get_info(Rest, All);
@@ -83,10 +73,29 @@ sub_loop_for_get_info([Socket|Rest], All) ->
 
 %%%%%%%%%%%%%%%%%%%%%%
 %tcp 消息格式：
-%% '{get_info}': 返回全部person数据
+%% '{get_info}': 返回全部?RD_PERSON数据
 %% '{set,{name, direction, attack}, {name_2, ...}, ....};:
 %%见record
 %%%%%%%%%%%%%%%%%%%%%%
+
+%% +-----------------------------------------------------------+
+%% |handle_set------------+                                    |
+%% |      |               |                                    |
+%% |      |           handle_content                           |
+%% |      |               |                                    |
+%% |sub_handle_set -------+                                    |
+%% |      |                                                    |
+%% |      |                                                    |
+%% |      |                                                    |
+%% |operation_on_ets                                           |
+%% |      |                                                    |
+%% |      |                                                    |
+%% |      |                                                    |
+%% |sub_operation_on_ets                                       |
+%% |                                                           |
+%% |                                                           |
+%% |                                                           |
+%% +-----------------------------------------------------------+
 
 %%处理'set'类请求
 handle_set(Socket, Content) ->
@@ -105,38 +114,82 @@ handle_content(Content) ->
     InitList = string:tokens(Content, "{}"),
     lists:filter(fun(X)->length(string:strip(X))>1 end, InitList).
 
-%% 真正处理set request的函数
+%% ContentList 形如 ["name,direction,att", "name2,direction2,att2"]
+sub_handle_set(Socket, []) -> ok;
 sub_handle_set(Socket, ContentList) ->
-    ok.                                         %明天写= =
+    [First|Rest] = ContentList,
+    FirstList = string:tokens(First, ","),
+    ListToBeOperate = lists:map(fun(X)->string:strip(X) end, FirstList),
+    operation_on_ets(ListToBeOperate),
+    sub_handle_set(Socket, Rest).
 
+%% 真正处理set request的函数
+%% [name, direction, att]
+operation_on_ets(ListToBeOperate)->
+    case ListToBeOperate of
+        [Name, Direction, Attack] ->
+            QueryResult = ets:lookup(?ETS_TABLE_NAME, Name),
+            case QueryResult of
+                [A] ->
+                    sub_operation_on_ets(A, Direction, Attack);
+                [] ->
+                    io:format("no result match~n");
+                _ ->
+                    io:format("no result match_2~n")
+            end;
+        _ ->
+            io:format("in line ~p~n", [?LINE])
+    end.
+
+%% 先随便写一下
+sub_operation_on_ets(QueryResult, Direction, Attack) ->
+    CurrentInfo = util_get_info(),
+    case Direction of
+        "left" ->
+            DirectionAtom = left;
+        "right" ->
+            DirectionAtom = right;
+        "up" ->
+            DirectionAtom = up;
+        "down" ->
+            DirectionAtom = down;
+        _ ->
+            io:format("wrong direction ~p~n", [?LINE]),
+            DirectionAtom = left
+    end,
+    ets:update_element(?ETS_TABLE_NAME,
+                       QueryResult#?RD_PERSON.?ETS_KEY_POS,
+                       {8, Direction}),
+    {RES_X, RES_Y} =  get_X_Y_in_control(QueryResult#?RD_PERSON.x,
+                                         QueryResult#?RD_PERSON.y,
+                                         DirectionAtom,
+                                         1),
+    ets:update_element(?ETS_TABLE_NAME,
+                       QueryResult#?RD_PERSON.?ETS_KEY_POS,
+                       {3, RES_X}),
+    ets:update_element(?ETS_TABLE_NAME,
+                       QueryResult#?RD_PERSON.?ETS_KEY_POS,
+                       {4, RES_Y}),
+    %% Attack 还没处理
+    ok.
+
+
+
+%% ========================================================================
 %%处理‘get’类请求
 handle_get(Socket, Content) ->
     if
         "{get_info}" == Content ->
-            sub_handle_get(Socket),
-            ok;
+            sub_handle_get(Socket);
         true -> io:format("dont match ‘{get_info}’")
     end,
     ok.
 
 sub_handle_get(Socket) ->
-    Key = ets:first(person_info),
-    Res = ets:lookup(person_info, Key),
-    Result = lists:flatten(io_lib:format("~p", gather(Res))),
+    Result = lists:flatten(io_lib:format("~p", util_get_info())),
     gen_tcp:send(Socket, Result).
 
 
-gather(Res) ->
-    [Combine|_Rest] = Res,
-    [Key|_] = Combine,
-    AnotherKey = ets:next(person_info, Key),
-    if
-        AnotherKey == '$end_of_table' ->
-            Res;
-        true ->
-            [AnotherRes] = ets:lookup(person_info, AnotherKey),
-            gather([AnotherRes|Res])
-    end.
 %% 处理‘get’请求 (end)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
