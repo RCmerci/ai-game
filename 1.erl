@@ -1,6 +1,10 @@
 -module('1').
 -export([init/0]).
--export([get_connect/3, start/0, loop_for_every_one/1]).
+-export([test/0,
+         test_get/0,
+         test_set/0]).
+-export([loop_for_set/1,
+         loop_for_get_info/1]).
 -include("records_and_config.hrl").
 -define(TEST, true).
 -import(utils, [util_get_info/0,
@@ -25,7 +29,7 @@ start()->
     {ok, SS} = gen_tcp:listen(10001, [list, {active, false}]),
     {ok, GetInfoSock} = get_connect(SS, 2, []),
     spawn(?MODULE, loop_for_get_info, [GetInfoSock]),
-    ok.
+    timer:sleep(infinity).
 
 get_connect(_Socket, 0, AccSock)-> {ok, AccSock};
 get_connect(Socket, Num, AccSock)->
@@ -50,8 +54,8 @@ loop_for_set(Socket)->
         {ok, Content} ->
             handle_set(Socket, Content),
             loop_for_set(Socket);
-        _ ->
-            io:format("error in fun[loop/1]"),
+        A ->
+            io:format("error in fun[loop/1],content:~p~n", [A]),
             exit('error_in_fun[loop/1]')
         end,
     ok.
@@ -68,7 +72,11 @@ sub_loop_for_get_info([Socket|Rest], All) ->
             handle_get(Socket, Content),
             sub_loop_for_get_info(Rest, All);
         {error, timeout} ->
-            sub_loop_for_get_info(Rest, All)
+            io:format("timeout in line:~p~n", [?LINE]),
+            sub_loop_for_get_info(Rest, All);
+        A ->
+            io:format("in line:~p,content:~p~n", [?LINE, A]),
+            exit("{error 1}")
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%
@@ -186,11 +194,38 @@ handle_get(Socket, Content) ->
     ok.
 
 sub_handle_get(Socket) ->
-    Result = lists:flatten(io_lib:format("~p", util_get_info())),
+    Result = lists:flatten(io_lib:format("~p", [util_get_info()])),
     gen_tcp:send(Socket, Result).
 
 
 %% 处理‘get’请求 (end)
+
+
+test()->
+    spawn(?MODULE, init, []),
+    timer:sleep(1000),
+    spawn(?MODULE, test_set, []),
+    timer:sleep(1000),
+    %% spawn(?MODULE, test_get, []),
+    ok.
+
+test_set() ->
+    {ok, S1} = gen_tcp:connect({127,0,0,1}, 10000, [list, {packet,0},{active, false}]),
+    timer:sleep(500),
+    {ok, S2} = gen_tcp:connect({127,0,0,1}, 10000, [list,{packet,0},{active,false}]),
+    timer:sleep(infinity).
+
+
+test_get() ->
+    {ok, S1} = gen_tcp:connect({127, 0, 0, 1}, 10001, [list, {packet, 0}, {active, false}]),
+    timer:sleep(500),
+    {ok, S2} = gen_tcp:connect({127, 0, 0, 1}, 10001, [list, {packet, 0}, {active, false}]),
+    gen_tcp:send(S1, "{get_info}"),
+    Result = gen_tcp:recv(S1, 0, 5000),
+    io:format("get_info:~p~n", [Result]),
+    ok.
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                       init----->start
