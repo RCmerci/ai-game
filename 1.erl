@@ -4,7 +4,8 @@
          test_get/0,
          test_set/0]).
 -export([loop_for_set/1,
-         loop_for_get_info/1]).
+         loop_for_get_info/1,
+         handle_content/1]).
 -include("records_and_config.hrl").
 -define(TEST, true).
 -import(utils, [util_get_info/0,
@@ -113,14 +114,15 @@ handle_set(Socket, Content) ->
         Set=="set" ->
             sub_handle_set(Socket,RestList);
         true ->
-            io:format("set 类请求格式错误~n~p~n", [Content])
+            io:format("set format wrong,~n~p~n", [Content])
     end,
     ok.
 
 %% 处理Content的内容,分割成list
 handle_content(Content) ->
     InitList = string:tokens(Content, "{}"),
-    lists:filter(fun(X)->length(string:strip(X))>1 end, InitList).
+    lists:filter(fun(X)->length(X)>1 end, lists:map(fun(X)-> string:strip(string:strip(string:strip(X),both,$,)) end, InitList)).
+
 
 %% ContentList 形如 ["name,direction,att", "name2,direction2,att2"]
 sub_handle_set(Socket, []) -> ok;
@@ -204,8 +206,8 @@ sub_handle_get(Socket) ->
 test()->
     spawn(?MODULE, init, []),
     timer:sleep(1000),
-    spawn(?MODULE, test_set, []),
-    timer:sleep(1000),
+    %% spawn(?MODULE, test_set, []),
+    %% timer:sleep(1000),
     %% spawn(?MODULE, test_get, []),
     ok.
 
@@ -213,7 +215,8 @@ test_set() ->
     {ok, S1} = gen_tcp:connect({127,0,0,1}, 10000, [list, {packet,0},{active, false}]),
     timer:sleep(500),
     {ok, S2} = gen_tcp:connect({127,0,0,1}, 10000, [list,{packet,0},{active,false}]),
-    timer:sleep(infinity).
+    gen_tcp:send(S2, "{set,{man_2, down, false}}"),
+    ok.
 
 
 test_get() ->
