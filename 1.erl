@@ -11,6 +11,7 @@
                 get_X_Y_in_control/6]).
 -import(handle_get, [loop_for_get_info/1]).
 -import(handle_set, [loop_for_set/1]).
+-import(operate, [operate_receiver/0]).
 %%初始化
 init()->
     %%ets table放在这里是否不好。（打算一个用户一个进程，但是ets表不能放在
@@ -18,12 +19,13 @@ init()->
     %%?RD_PERSON 会不好弄，都放的话要复制几个相同的）
     ets:new(?ETS_TABLE_NAME, [named_table, public, {keypos, #?RD_PERSON.?ETS_KEY_POS}]),
     %%这里以后要定义一些宏，不要硬编码
-    ets:insert(?ETS_TABLE_NAME, #?RD_PERSON{name="man_1", x=0, y=0, hp=100, mp=100, damage=10, direction="right"}),
-    ets:insert(?ETS_TABLE_NAME, #?RD_PERSON{name="man_2", x=20, y=20, hp=100, mp=100, damage=10, direction="left"}),
+    ets:insert(?ETS_TABLE_NAME, #?RD_PERSON{name="man_1", x=0, y=0, hp=100, mp=100, damage=10, direction=right}),
+    ets:insert(?ETS_TABLE_NAME, #?RD_PERSON{name="man_2", x=20, y=20, hp=100, mp=100, damage=10, direction=left}),
 
     start().
 
 start()->
+    register(operate_receiver, spawn(operate, operate_receiver ,[])),
     {ok, S} = gen_tcp:listen(10000, [list, {active, false}]), %S for set
     {ok, AccSock} = get_connect(S, 2, []),
     loop_for_set(AccSock),

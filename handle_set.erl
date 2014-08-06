@@ -4,7 +4,8 @@
 -include("records_and_config.hrl").
 -import(utils, [util_get_info/0,
                 get_X_Y_in_control/4,
-                get_X_Y_in_control/6]).
+                get_X_Y_in_control/6,
+                get_item_by_keypos/1]).
 
 
 loop_for_set([]) -> ok;
@@ -70,15 +71,15 @@ sub_handle_set(Socket, ContentList) ->
     operation_on_ets(ListToBeOperate),
     sub_handle_set(Socket, Rest).
 
-%% 真正处理set request的函数
+%% 处理set request的函数
 %% [name, direction, att]
 operation_on_ets(ListToBeOperate)->
     case ListToBeOperate of
-        [Name, Direction, Attack] ->
-            QueryResult = ets:lookup(?ETS_TABLE_NAME, Name),
-            case QueryResult of
-                [A] ->
-                    sub_operation_on_ets(A, Direction, Attack);
+        [Name, _Direction, _Attack] ->
+            QueryResult = get_item_by_keypos(Name),
+            case [QueryResult] of
+                [_A] ->
+                    operate_receiver ! ListToBeOperate;
                 [] ->
                     io:format("no result match~n");
                 _ ->
@@ -88,34 +89,21 @@ operation_on_ets(ListToBeOperate)->
             io:format("in line ~p~n", [?LINE])
     end.
 
-%% 先随便写一下
-sub_operation_on_ets(QueryResult, Direction, Attack) ->
-    CurrentInfo = util_get_info(),
-    case Direction of
-        "left" ->
-            DirectionAtom = left;
-        "right" ->
-            DirectionAtom = right;
-        "up" ->
-            DirectionAtom = up;
-        "down" ->
-            DirectionAtom = down;
-        _ ->
-            io:format("wrong direction ~p~n", [?LINE]),
-            DirectionAtom = left
-    end,
-    ets:update_element(?ETS_TABLE_NAME,
-                       QueryResult#?RD_PERSON.?ETS_KEY_POS,
-                       {8, Direction}),
-    {RES_X, RES_Y} =  get_X_Y_in_control(QueryResult#?RD_PERSON.x,
-                                         QueryResult#?RD_PERSON.y,
-                                         DirectionAtom,
-                                         1),
-    ets:update_element(?ETS_TABLE_NAME,
-                       QueryResult#?RD_PERSON.?ETS_KEY_POS,
-                       {3, RES_X}),
-    ets:update_element(?ETS_TABLE_NAME,
-                       QueryResult#?RD_PERSON.?ETS_KEY_POS,
-                       {4, RES_Y}),
-    %% Attack 还没处理
-    ok.
+
+%% sub_operation_on_ets(ListToBeOperate) ->
+%%     DirectionAtom = direction_string_to_atom(Direction),
+%%     ets:update_element(?ETS_TABLE_NAME,
+%%                        QueryResult#?RD_PERSON.?ETS_KEY_POS,
+%%                        {8, Direction}),
+%%     {RES_X, RES_Y} =  get_X_Y_in_control(QueryResult#?RD_PERSON.x,
+%%                                          QueryResult#?RD_PERSON.y,
+%%                                          DirectionAtom,
+%%                                          1),
+%%     ets:update_element(?ETS_TABLE_NAME,
+%%                        QueryResult#?RD_PERSON.?ETS_KEY_POS,
+%%                        {3, RES_X}),
+%%     ets:update_element(?ETS_TABLE_NAME,
+%%                        QueryResult#?RD_PERSON.?ETS_KEY_POS,
+%%                        {4, RES_Y}),
+%%     %% Attack 还没处理
+%%     ok.

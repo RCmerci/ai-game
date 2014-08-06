@@ -1,8 +1,12 @@
 -module(utils).
 -include("records_and_config.hrl").
 
--export([util_get_info/0, get_X_Y_in_control/6, get_X_Y_in_control/4]).
--export([test_util_get_info/0]).
+-export([util_get_info/0,
+         get_X_Y_in_control/6,
+         get_X_Y_in_control/4,
+         get_item_by_keypos/1]).
+-export([test_util_get_info/0,
+         test_get_item_by_keypos/0]).
 
 -define(TEST, false).
 %% ----------------------------------------------------------
@@ -61,7 +65,7 @@ gather(Res, name) when ?TEST ->
 
 %% -----------------------------------------------------
 %% 返回x，y坐标，并保持在范围里面
-
+%%return  {X, Y}
 get_X_Y_in_control(X, Y, Direction, Step, MAX_X, MAX_Y) ->
     case Direction of
         left ->
@@ -87,3 +91,34 @@ get_X_Y_in_control(X, Y, Direction, Step, MAX_X, MAX_Y) ->
     end.
 get_X_Y_in_control(X, Y, Direction, Step) ->
     get_X_Y_in_control(X, Y, Direction, Step, ?MAX_X, ?MAX_Y).
+
+
+get_item_by_keypos(Key) when not(?TEST)->
+    case ets:lookup(?ETS_TABLE_NAME, Key) of
+        [A] ->
+            A;
+        _ ->
+            io:format("module:~p,line:~p~n", [?MODULE, ?LINE]),
+            {error, noitem}
+    end;
+get_item_by_keypos(Key) when ?TEST->
+    case ets:lookup(tttt, Key) of
+        [A] ->
+            A;
+        _ ->
+            io:format("module:~p,line:~p~n", [?MODULE, ?LINE]),
+            {error, noitem}
+    end.
+
+test_get_item_by_keypos() ->
+    ets:new(tttt, [named_table]),
+    R1 = get_item_by_keypos(1),
+    ets:insert(tttt, {1,2}),
+    R2 = get_item_by_keypos(1),
+    case [R1, R2] of
+        [{error, noitem}, {1,2}] ->
+            io:format("test_get_item_by_keypos success~n");
+        W ->
+            io:format("~p~n", [W]),
+            io:format("test_get_item_by_keypos failed~n")
+    end.
